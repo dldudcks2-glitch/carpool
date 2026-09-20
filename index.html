@@ -46,10 +46,10 @@
         <!-- 운전자 등록 폼 -->
         <div id="driver-form" class="form-section">
             <h3>🚙 운전자 정보 입력</h3>
-            <label>이름 선택 (주소로 동명이인 확인):</label>
+            <label>이름 선택:</label>
             <select id="driver-name"></select>
             
-            <label>운행 가능 지역 (주요 경유 지역 선택):</label>
+            <label>운행 가능 지역:</label>
             <select id="driver-route">
                 <option value="서구">서구</option>
                 <option value="유성구">유성구</option>
@@ -72,7 +72,7 @@
         <!-- 탑승자 신청 폼 -->
         <div id="rider-form" class="form-section">
             <h3>🙋‍♂️ 탑승자 정보 입력</h3>
-            <label>이름 선택 (주소로 동명이인 확인):</label>
+            <label>이름 선택:</label>
             <select id="rider-name"></select>
             
             <label>목적지 선택:</label>
@@ -93,38 +93,38 @@
         <div class="result-box">
             <h3>📊 실시간 카풀 매칭 현황</h3>
             <div id="match-status">
-                <p style="color: #666; text-align: center;">아직 등록된 정보가 없습니다.</p>
+                <p style="color: #666; text-align: center;">불러오는 중...</p>
             </div>
         </div>
 
-        <!-- 카풀 매칭 초기화 버튼 (암호 보호) -->
+        <!-- 매칭 초기화 버튼 (암호 '260831') -->
         <div style="margin-top: 20px; text-align: right;">
             <button onclick="resetMatchingData()" style="padding: 6px 12px; font-size: 12px; background: #e74a3b; color: white; border: none; border-radius: 4px; cursor: pointer;">🔄 카풀 매칭 초기화</button>
         </div>
     </div>
 
     <script>
+        // ⚠️ [중요] 1단계에서 복사한 구글 앱스 스크립트 웹 앱 URL을 여기에 붙여넣으세요!
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxbXGHyq4MMG8E-AQO-P6UFJJmhhS-Z1myC4phUZgBzrEIhBQ3ypwrn4FE-64GAfsrK/exec";
+
         let members = [];
         let drivers = [];
         let riders = [];
+        const GITHUB_CSV_URL = "members.csv"; 
 
-        // GitHub에 업로드될 CSV 파일 경로 (나중에 깃허브 레포지토리에 members.csv 파일을 올리면 자동 연동됩니다)
-        const GITHUB_CSV_URL = "https://raw.githubusercontent.com/dldudcks2-glitch/carpool/refs/heads/main/members.csv"; 
-
-        window.onload = function() {
-            loadMembersFromGitHub();
+        window.onload = async function() {
+            await loadMembersFromGitHub();
+            await fetchSyncData(); // 구글 시트에서 최신 현황 불러오기
+            setInterval(fetchSyncData, 5000); // 5초마다 자동 동기화
         };
 
-        // GitHub에서 주소록 CSV 불러오기
         async function loadMembersFromGitHub() {
             try {
                 const response = await fetch(GITHUB_CSV_URL);
-                if (!response.ok) throw new Error("파일을 불러올 수 없습니다.");
+                if (!response.ok) throw new Error();
                 const text = await response.text();
                 parseCSVText(text);
             } catch (error) {
-                console.log("외부 CSV 로드 실패, 기본 테스트 데이터를 사용합니다.", error);
-                // 로컬 테스트용 기본 데이터
                 members = [
                     { name: "강성아 자매", address: "대전 서구 청사로 281" },
                     { name: "강예은 자매", address: "대전 서구 둔산로 100" },
@@ -139,7 +139,6 @@
             const lines = text.split(/\r\n|\n/);
             let parsedMembers = [];
             let startIndex = (lines.length > 0 && (lines[0].includes("이름") || lines[0].includes("name"))) ? 1 : 0;
-
             for (let i = startIndex; i < lines.length; i++) {
                 let line = lines[i].trim();
                 if (!line) continue;
@@ -150,10 +149,7 @@
                     if (name && address) parsedMembers.push({ name: name, address: address });
                 }
             }
-
-            if (parsedMembers.length > 0) {
-                members = parsedMembers;
-            }
+            if (parsedMembers.length > 0) members = parsedMembers;
             populateDropdowns();
         }
 
@@ -162,26 +158,128 @@
             const riderSelect = document.getElementById('rider-name');
             driverSelect.innerHTML = "";
             riderSelect.innerHTML = "";
-
             members.forEach((m, index) => {
                 let displayText = `${m.name} (${m.address})`;
                 driverSelect.innerHTML += `<option value="${index}">${displayText}</option>`;
                 riderSelect.innerHTML += `<option value="${index}">${displayText}</option>`;
             });
-            document.getElementById('member-count').innerText = `현재 등록된 성도 수: ${members.length}명 (GitHub 주소록 연동 완료)`;
+            document.getElementById('member-count').innerText = `현재 등록된 성도 수: ${members.length}명 (실시간 연동 완료)`;
         }
 
-        // 카풀 매칭 데이터 초기화 (암호 '260831')
-        function resetMatchingData() {
-            let password = prompt("카풀 매칭을 초기화하려면 암호를 입력하세요:");
-            if (password === null) return;
-            
-            if (password === "260831") {
+        // 구글 스프레드시트와 데이터 동기화 (서버에서 가져오기)
+        async function fetchSyncData() {
+            if (GOOGLE_SCRIPT_URL.includes("여기에")) return;
+            try {
+                let response = await fetch(GOOGLE_SCRIPT_URL, { method: "GET" });
+                let rows = await response.json();
+                
                 drivers = [];
                 riders = [];
-                updateMatching();
-                alert("카풀 매칭 현황이 초기화되었습니다.");
-            } else {
+
+                for (let i = 1; i < rows.length; i++) {
+                    let r = rows[i];
+                    if (r[0] === "Driver") {
+                        drivers.push({
+                            name: r[1],
+                            address: getAddressByName(r[1]),
+                            route: r[2],
+                            seats: parseInt(r[3]),
+                            passengers: r[4] ? JSON.parse(r[4]) : [],
+                            originalIndex: String(r[6]),
+                            manualRiders: []
+                        });
+                    } else if (r[0] === "Rider") {
+                        riders.push({
+                            name: r[1],
+                            address: r[2],
+                            time: r[5] ? Number(r[5]) : Date.now(),
+                            originalIndex: String(r[6])
+                        });
+                    }
+                }
+                renderMatching();
+            } catch (e) {
+                console.error("동기화 오류", e);
+            }
+        }
+
+        // 구글 스프레드시트로 데이터 저장하기 (서버로 보내기)
+        async function saveSyncData() {
+            if (GOOGLE_SCRIPT_URL.includes("여기에")) return;
+            try {
+                await fetch(GOOGLE_SCRIPT_URL, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "text/plain" },
+                    body: JSON.stringify({ action: "save", drivers: drivers, riders: riders })
+                });
+            } catch (e) {
+                console.error("저장 오류", e);
+            }
+        }
+
+        function getMemberByIndex(index) { return members[index] || { name: "알 수 없음", address: "주소 미확인" }; }
+        function getAddressByName(name) { let found = members.find(m => m.name === name); return found ? found.address : ""; }
+        function isNearby(route, addr) { return addr && addr.includes(route); }
+
+        function registerDriver() {
+            let index = document.getElementById('driver-name').value;
+            let route = document.getElementById('driver-route').value;
+            let seats = parseInt(document.getElementById('driver-seats').value);
+            if (index === "") return alert("이름을 선택해주세요!");
+            let member = getMemberByIndex(index);
+            if (drivers.some(d => d.name === member.name)) return alert("이미 운전자로 등록되었습니다.");
+
+            drivers.push({ name: member.name, address: member.address, route, seats, originalIndex: String(index), manualRiders: [], passengers: [] });
+            saveSyncData();
+            renderMatching();
+            showForm('');
+            alert("운행 등록 완료!");
+        }
+
+        function registerRider() {
+            let index = document.getElementById('rider-name').value;
+            let destType = document.getElementById('destination-type').value;
+            if (index === "") return alert("이름을 선택해주세요!");
+            let member = getMemberByIndex(index);
+            if (riders.some(r => r.name === member.name) || drivers.some(d => d.name === member.name)) return alert("이미 신청되었거나 운전잡니다.");
+
+            let finalAddress = (destType === 'home') ? member.address : (document.getElementById('rider-custom-address').value.trim() + " (외부 목적지)");
+            if (destType === 'other' && !finalAddress) return alert("목적지를 입력해주세요!");
+
+            riders.push({ name: member.name, address: finalAddress, originalIndex: String(index), time: Date.now() });
+            saveSyncData();
+            renderMatching();
+            showForm('');
+            document.getElementById('rider-custom-address').value = "";
+            alert("탑승 신청 완료!");
+        }
+
+        function deleteDriver(i) {
+            if (confirm("운전자 등록을 취소하시겠습니까?")) {
+                drivers.splice(i, 1);
+                saveSyncData();
+                renderMatching();
+            }
+        }
+
+        function deleteRider(i) {
+            if (confirm("탑승 신청을 취소하시겠습니까?")) {
+                riders.splice(i, 1);
+                saveSyncData();
+                renderMatching();
+            }
+        }
+
+        function resetMatchingData() {
+            let pw = prompt("초기화 암호를 입력하세요:");
+            if (pw === "260831") {
+                drivers = [];
+                riders = [];
+                saveSyncData();
+                renderMatching();
+                alert("초기화되었습니다.");
+            } else if (pw !== null) {
                 alert("암호가 틀렸습니다!");
             }
         }
@@ -194,217 +292,62 @@
         }
 
         function toggleDestinationInput() {
-            const type = document.getElementById('destination-type').value;
-            const box = document.getElementById('custom-dest-box');
-            box.style.display = (type === 'other') ? 'block' : 'none';
+            let type = document.getElementById('destination-type').value;
+            document.getElementById('custom-dest-box').style.display = (type === 'other') ? 'block' : 'none';
         }
 
-        function getMemberByIndex(index) {
-            return members[index] || { name: "알 수 없음", address: "주소 미확인" };
-        }
+        function renderMatching() {
+            let waitingRiders = [...riders.sort((a, b) => a.time - b.time)];
+            drivers.forEach(d => d.passengers = []);
+            let unmatched = [];
 
-        function isNearby(driverRoute, riderAddr) {
-            if (!driverRoute || !riderAddr) return false;
-            return riderAddr.includes(driverRoute);
-        }
-
-        function registerDriver() {
-            const index = document.getElementById('driver-name').value;
-            const route = document.getElementById('driver-route').value;
-            const seats = parseInt(document.getElementById('driver-seats').value);
-            
-            if (index === "") { alert("이름을 선택해주세요!"); return; }
-            if (drivers.some(d => d.originalIndex === index)) { alert("이미 운전자로 등록되었습니다."); return; }
-
-            let member = getMemberByIndex(index);
-            drivers.push({ name: member.name, address: member.address, route, seats, originalIndex: index, manualRiders: [], passengers: [] });
-            alert(`${member.name} 운전자님 등록 완료!`);
-            showForm('');
-            updateMatching();
-        }
-
-        function registerRider() {
-            const index = document.getElementById('rider-name').value;
-            const destType = document.getElementById('destination-type').value;
-            
-            if (index === "") { alert("이름을 선택해주세요!"); return; }
-            if (riders.some(r => r.originalIndex === index) || drivers.some(d => d.originalIndex === index)) {
-                alert("이미 신청되었거나 운전자로 등록된 명단입니다.");
-                return;
-            }
-
-            let member = getMemberByIndex(index);
-            let finalAddress = "";
-            if (destType === 'home') {
-                finalAddress = member.address;
-            } else {
-                let customInput = document.getElementById('rider-custom-address').value.trim();
-                if (!customInput) { alert("이동할 목적지 주소를 입력해주세요!"); return; }
-                finalAddress = customInput + " (외부 목적지)";
-            }
-
-            riders.push({ name: member.name, address: finalAddress, originalIndex: index, time: Date.now() });
-            alert(`${member.name}님 탑승 신청 완료!`);
-            showForm('');
-            document.getElementById('rider-custom-address').value = "";
-            updateMatching();
-        }
-
-        function editDriver(i) {
-            let d = drivers[i];
-            let newRoute = prompt("변경할 운행 지역을 선택 또는 입력하세요 (서구, 유성구, 중구, 동구, 대덕구, 세종시):", d.route);
-            if (!newRoute) return;
-            let newSeats = prompt("변경할 잔여석 인원을 입력하세요 (1~4):", d.seats);
-            if (!newSeats || isNaN(newSeats)) return;
-
-            d.route = newRoute.trim();
-            d.seats = parseInt(newSeats);
-            updateMatching();
-        }
-
-        function deleteDriver(i) {
-            if (confirm(`${drivers[i].name} 운전자 등록을 취소하시겠습니까?`)) {
-                drivers.splice(i, 1);
-                updateMatching();
-            }
-        }
-
-        function editRider(i) {
-            let r = riders[i];
-            let newDest = prompt("변경할 목적지 주소를 입력하세요:", r.address);
-            if (!newDest) return;
-            r.address = newDest.trim();
-            updateMatching();
-        }
-
-        function deleteRider(i) {
-            if (confirm(`${riders[i].name} 탑승 신청을 취소하시겠습니까?`)) {
-                drivers.forEach(d => {
-                    d.manualRiders = d.manualRiders.filter(item => item.originalIndex !== riders[i].originalIndex);
-                });
-                riders.splice(i, 1);
-                updateMatching();
-            }
-        }
-
-        function manualPickRider(driverIdx, riderOriginalIndex) {
-            let driver = drivers[driverIdx];
-            let rider = riders.find(r => r.originalIndex === riderOriginalIndex);
-            
-            if (!rider) return;
-
-            if (driver.manualRiders.some(r => r.originalIndex === riderOriginalIndex)) {
-                alert("이미 이 차량에 배정되어 있습니다.");
-                return;
-            }
-
-            if (driver.manualRiders.length >= driver.seats) {
-                alert("이 차량의 잔여석이 부족합니다!");
-                return;
-            }
-
-            driver.manualRiders.push(rider);
-            updateMatching();
-        }
-
-        function updateMatching() {
-            let manuallyAssignedIndices = new Set();
-            drivers.forEach(d => {
-                if (d.manualRiders.length > d.seats) {
-                    d.manualRiders = d.manualRiders.slice(0, d.seats);
-                }
-                d.manualRiders.forEach(r => manuallyAssignedIndices.add(r.originalIndex));
-            });
-
-            let autoWaitingRiders = riders.filter(r => !manuallyAssignedIndices.has(r.originalIndex));
-            autoWaitingRiders.sort((a, b) => a.time - b.time);
-
-            drivers.forEach(d => {
-                d.passengers = [...d.manualRiders];
-            });
-
-            let unmatchedRiders = [];
-
-            autoWaitingRiders.forEach(rider => {
+            waitingRiders.forEach(r => {
                 let assigned = false;
-                for (let driver of drivers) {
-                    let availableSeats = driver.seats - driver.passengers.length;
-                    if (availableSeats > 0) {
-                        if (isNearby(driver.route, rider.address)) {
-                            driver.passengers.push(rider);
-                            assigned = true;
-                            break;
-                        }
+                for (let d of drivers) {
+                    if (d.passengers.length < d.seats && isNearby(d.route, r.address)) {
+                        d.passengers.push(r);
+                        assigned = true;
+                        break;
                     }
                 }
-                if (!assigned) unmatchedRiders.push(rider);
+                if (!assigned) unmatched.push(r);
             });
 
-            let statusHTML = "";
+            let html = "";
             if (drivers.length === 0 && riders.length === 0) {
                 document.getElementById('match-status').innerHTML = `<p style="color: #666; text-align: center;">아직 등록된 정보가 없습니다.</p>`;
                 return;
             }
 
-            drivers.forEach((d, index) => {
-                let isCompleted = d.passengers.length >= d.seats;
-                let cardClass = isCompleted ? "match-card completed" : "match-card";
-                let badgeHTML = isCompleted ? '<span class="badge-done">매칭 완료 ✅</span>' : '';
-
-                let riderListHTML = '';
-                if (d.passengers.length > 0) {
-                    riderListHTML = '<ul class="rider-list">' + d.passengers.map(p => `<li>➔ <b>${p.name}</b> (${p.address})</li>`).join('') + '</ul>';
-                } else {
-                    riderListHTML = '<p style="margin: 5px 0 0 10px; color: #888; font-size: 14px;">아직 매칭된 탑승자 없음</p>';
-                }
-
-                statusHTML += `
-                    <div class="${cardClass}">
-                        <div class="action-btns">
-                            <button class="btn-edit" onclick="editDriver(${index})">수정</button>
-                            <button class="btn-del" onclick="deleteDriver(${index})">취소</button>
-                        </div>
-                        <b>🚙 운전자: ${d.name}</b> [운행 지역: ${d.route}] (인원: ${d.passengers.length}/${d.seats}석) ${badgeHTML}<br>
+            drivers.forEach((d, idx) => {
+                let isDone = d.passengers.length >= d.seats;
+                html += `
+                    <div class="${isDone ? 'match-card completed' : 'match-card'}">
+                        <div class="action-btns"><button class="btn-del" onclick="deleteDriver(${idx})">취소</button></div>
+                        <b>🚙 운전자: ${d.name}</b> [운행 지역: ${d.route}] (인원: ${d.passengers.length}/${d.seats}석) ${isDone ? '<span class="badge-done">완료 ✅</span>' : ''}<br>
                         👉 <b>탑승 멤버:</b>
-                        ${riderListHTML}
+                        <ul class="rider-list">
+                            ${d.passengers.length > 0 ? d.passengers.map(p => `<li>➔ <b>${p.name}</b> (${p.address})</li>`).join('') : '<li style="color:#888;">아직 탑승자 없음</li>'}
+                        </ul>
                     </div>
                 `;
             });
 
-            if (unmatchedRiders.length > 0 || drivers.some(d => d.passengers.length < d.seats)) {
-                let displayWaiting = riders.filter(r => !drivers.some(d => d.passengers.some(p => p.originalIndex === r.originalIndex)));
-
-                if (displayWaiting.length > 0) {
-                    statusHTML += `
-                        <div class="waiting-box">
-                            ⏳ <b>[대기자 명단]</b> (수동 선택 또는 자동 매칭 대기)<br>
-                            <ul style="margin: 5px 0 0 20px; padding: 0;">
-                                ${displayWaiting.map(r => {
-                                    let originalIdx = riders.findIndex(item => item.originalIndex === r.originalIndex);
-                                    
-                                    let pickButtons = drivers.map((d, dIdx) => {
-                                        let hasSeat = d.passengers.length < d.seats;
-                                        return hasSeat ? `<button class="btn-pick" onclick="manualPickRider(${dIdx}, '${r.originalIndex}')">${d.name} 차에 태우기</button>` : '';
-                                    }).join(' ');
-
-                                    return `<li style="margin-bottom: 8px;">
-                                        <b>${r.name}</b> — 목적지: ${r.address}
-                                        <div style="margin-top: 3px;">
-                                            ${pickButtons}
-                                            <button class="btn-edit" style="padding: 1px 5px; font-size: 10px;" onclick="editRider(${originalIdx})">수정</button>
-                                            <button class="btn-del" style="padding: 1px 5px; font-size: 10px;" onclick="deleteRider(${originalIdx})">취소</button>
-                                        </div>
-                                    </li>`;
-                                }).join('')}
-                            </ul>
-                        </div>
-                    `;
-                }
+            if (unmatched.length > 0) {
+                html += `
+                    <div class="waiting-box">
+                        ⏳ <b>[대기자 명단]</b><br>
+                        <ul style="margin: 5px 0 0 20px; padding: 0;">
+                            ${unmatched.map((r, rIdx) => {
+                                let originalIdx = riders.findIndex(item => item.originalIndex === r.originalIndex);
+                                return `<li style="margin-bottom: 5px;"><b>${r.name}</b> — 목적지: ${r.address} <button class="btn-del" style="padding:1px 5px; font-size:10px;" onclick="deleteRider(${originalIdx})">취소</button></li>`;
+                            }).join('')}
+                        </ul>
+                    </div>
+                `;
             }
-
-            document.getElementById('match-status').innerHTML = statusHTML;
+            document.getElementById('match-status').innerHTML = html;
         }
     </script>
-
 </body>
 </html>
