@@ -25,6 +25,7 @@
         .action-btns button { padding: 3px 8px; font-size: 12px; font-weight: normal; margin-left: 4px; border-radius: 3px; }
         .btn-edit { background-color: #f6c23e; color: #fff; }
         .btn-del { background-color: #e74a3b; color: #fff; }
+        .btn-pick { background-color: #1cc88a; color: #fff; padding: 2px 6px; font-size: 11px; border-radius: 3px; font-weight: normal; margin-right: 3px; }
         .rider-list { margin: 8px 0 0 0; padding-left: 15px; list-style-type: none; }
         .rider-list li { margin-bottom: 4px; font-size: 14px; color: #333; }
         .badge-done { background-color: #1cc88a; color: white; padding: 2px 6px; font-size: 11px; border-radius: 3px; font-weight: bold; margin-left: 5px; }
@@ -103,7 +104,7 @@
     </div>
 
     <script>
-        // ⚠️ 새로 배포한 웹 앱 URL을 여기에 넣어주세요!
+        // ⚠️ 본인의 구글 앱스 스크립트 웹 앱 URL을 여기에 넣어주세요!
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwwO--uUvveJJj-nM70gSV3TO9voY211g5euq9bxZgsDy3GqpAFmTP9RZHxiAVC7a4f/exec";
 
         let members = [];
@@ -249,6 +250,19 @@
             alert("탑승 신청 완료!");
         }
 
+        function editDriver(i) {
+            let d = drivers[i];
+            let newRoute = prompt("변경할 운행 지역을 선택 또는 입력하세요 (서구, 유성구, 중구, 동구, 대덕구, 세종시):", d.route);
+            if (!newRoute) return;
+            let newSeats = prompt("변경할 잔여석 인원을 입력하세요 (1~4):", d.seats);
+            if (!newSeats || isNaN(newSeats)) return;
+
+            d.route = newRoute.trim();
+            d.seats = parseInt(newSeats);
+            saveSyncData();
+            renderMatching();
+        }
+
         function deleteDriver(i) {
             if (confirm("운전자 등록을 취소하시겠습니까?")) {
                 drivers.splice(i, 1);
@@ -257,12 +271,49 @@
             }
         }
 
+        function editRider(i) {
+            let r = riders[i];
+            let newDest = prompt("변경할 목적지 주소를 입력하세요:", r.address);
+            if (!newDest) return;
+            r.address = newDest.trim();
+            saveSyncData();
+            renderMatching();
+        }
+
         function deleteRider(i) {
             if (confirm("탑승 신청을 취소하시겠습니까?")) {
+                drivers.forEach(d => {
+                    if (d.manualRiders) {
+                        d.manualRiders = d.manualRiders.filter(item => item.originalIndex !== riders[i].originalIndex);
+                    }
+                });
                 riders.splice(i, 1);
                 saveSyncData();
                 renderMatching();
             }
+        }
+
+        // 🧠 운전자가 대기자를 수동으로 자기 차에 태우는 함수
+        function manualPickRider(driverIdx, riderOriginalIndex) {
+            let driver = drivers[driverIdx];
+            let rider = riders.find(r => r.originalIndex === riderOriginalIndex);
+            
+            if (!rider) return;
+            if (!driver.manualRiders) driver.manualRiders = [];
+
+            if (driver.manualRiders.some(r => r.originalIndex === riderOriginalIndex)) {
+                alert("이미 이 차량에 배정되어 있습니다.");
+                return;
+            }
+
+            if (driver.passengers.length >= driver.seats) {
+                alert("이 차량의 잔여석이 부족합니다!");
+                return;
+            }
+
+            driver.manualRiders.push(rider);
+            saveSyncData();
+            renderMatching();
         }
 
         function resetMatchingData() {
@@ -291,20 +342,38 @@
         }
 
         function renderMatching() {
-            let waitingRiders = [...riders.sort((a, b) => a.time - b.time)];
-            drivers.forEach(d => d.passengers = []);
+            // 수동 배정된 탑승자들의 고유 번호 목록 수집
+            let manuallyAssignedIndices = new Set();
+            drivers.forEach(d => {
+                if (!d.manualRiders) d.manualRiders = [];
+                if (d.manualRiders.length > d.seats) {
+                    d.manualRiders = d.manualRiders.slice(0, d.seats);
+                }
+                d.manualRiders.forEach(r => manuallyAssignedIndices.add(r.originalIndex));
+            });
+
+            let autoWaitingRiders = riders.filter(r => !manuallyAssignedIndices.has(r.originalIndex));
+            autoWaitingRiders.sort((a, b) => a.time - b.time);
+
+            drivers.forEach(d => {
+                d.passengers = [...d.manualRiders];
+            });
+
             let unmatched = [];
 
-            waitingRiders.forEach(r => {
+            autoWaitingRiders.forEach(rider => {
                 let assigned = false;
-                for (let d of drivers) {
-                    if (d.passengers.length < d.seats && isNearby(d.route, r.address)) {
-                        d.passengers.push(r);
-                        assigned = true;
-                        break;
+                for (let driver of drivers) {
+                    let availableSeats = driver.seats - driver.passengers.length;
+                    if (availableSeats > 0) {
+                        if (isNearby(driver.route, rider.address)) {
+                            driver.passengers.push(rider);
+                            assigned = true;
+                            break;
+                        }
                     }
                 }
-                if (!assigned) unmatched.push(r);
+                if (!assigned) unmatched.push(rider);
             });
 
             let html = "";
@@ -315,30 +384,56 @@
 
             drivers.forEach((d, idx) => {
                 let isDone = d.passengers.length >= d.seats;
+                let riderListHTML = '';
+                if (d.passengers.length > 0) {
+                    riderListHTML = '<ul class="rider-list">' + d.passengers.map(p => `<li>➔ <b>${p.name}</b> (${p.address})</li>`).join('') + '</ul>';
+                } else {
+                    riderListHTML = '<p style="margin: 5px 0 0 10px; color: #888; font-size: 14px;">아직 매칭된 탑승자 없음</p>';
+                }
+
                 html += `
                     <div class="${isDone ? 'match-card completed' : 'match-card'}">
-                        <div class="action-btns"><button class="btn-del" onclick="deleteDriver(${idx})">취소</button></div>
+                        <div class="action-btns">
+                            <button class="btn-edit" onclick="editDriver(${idx})">수정</button>
+                            <button class="btn-del" onclick="deleteDriver(${idx})">취소</button>
+                        </div>
                         <b>🚙 운전자: ${d.name}</b> [운행 지역: ${d.route}] (인원: ${d.passengers.length}/${d.seats}석) ${isDone ? '<span class="badge-done">완료 ✅</span>' : ''}<br>
                         👉 <b>탑승 멤버:</b>
-                        <ul class="rider-list">
-                            ${d.passengers.length > 0 ? d.passengers.map(p => `<li>➔ <b>${p.name}</b> (${p.address})</li>`).join('') : '<li style="color:#888;">아직 탑승자 없음</li>'}
-                        </ul>
+                        ${riderListHTML}
                     </div>
                 `;
             });
 
-            if (unmatched.length > 0) {
-                html += `
-                    <div class="waiting-box">
-                        ⏳ <b>[대기자 명단]</b><br>
-                        <ul style="margin: 5px 0 0 20px; padding: 0;">
-                            ${unmatched.map((r, rIdx) => {
-                                let originalIdx = riders.findIndex(item => item.originalIndex === r.originalIndex);
-                                return `<li style="margin-bottom: 5px;"><b>${r.name}</b> — 목적지: ${r.address} <button class="btn-del" style="padding:1px 5px; font-size:10px;" onclick="deleteRider(${originalIdx})">취소</button></li>`;
-                            }).join('')}
-                        </ul>
-                    </div>
-                `;
+            if (unmatched.length > 0 || drivers.some(d => d.passengers.length < d.seats)) {
+                let displayWaiting = riders.filter(r => !drivers.some(d => d.passengers.some(p => p.originalIndex === r.originalIndex)));
+
+                if (displayWaiting.length > 0) {
+                    html += `
+                        <div class="waiting-box">
+                            ⏳ <b>[대기자 명단]</b> (수동 선택 또는 자동 매칭 대기)<br>
+                            <ul style="margin: 5px 0 0 20px; padding: 0;">
+                                ${displayWaiting.map(r => {
+                                    let originalIdx = riders.findIndex(item => item.originalIndex === r.originalIndex);
+                                    
+                                    // 각 운전자별 [내 차에 태우기] 버튼 생성
+                                    let pickButtons = drivers.map((d, dIdx) => {
+                                        let hasSeat = d.passengers.length < d.seats;
+                                        return hasSeat ? `<button class="btn-pick" onclick="manualPickRider(${dIdx}, '${r.originalIndex}')">${d.name} 차에 태우기</button>` : '';
+                                    }).join(' ');
+
+                                    return `<li style="margin-bottom: 8px;">
+                                        <b>${r.name}</b> — 목적지: ${r.address}
+                                        <div style="margin-top: 3px;">
+                                            ${pickButtons}
+                                            <button class="btn-edit" style="padding: 1px 5px; font-size: 10px;" onclick="editRider(${originalIdx})">수정</button>
+                                            <button class="btn-del" style="padding: 1px 5px; font-size: 10px;" onclick="deleteRider(${originalIdx})">취소</button>
+                                        </div>
+                                    </li>`;
+                                }).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
             }
             document.getElementById('match-status').innerHTML = html;
         }
