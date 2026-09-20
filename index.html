@@ -25,7 +25,6 @@
         .action-btns button { padding: 3px 8px; font-size: 12px; font-weight: normal; margin-left: 4px; border-radius: 3px; }
         .btn-edit { background-color: #f6c23e; color: #fff; }
         .btn-del { background-color: #e74a3b; color: #fff; }
-        .btn-pick { background-color: #1cc88a; color: #fff; padding: 2px 6px; font-size: 11px; border-radius: 3px; font-weight: normal; }
         .rider-list { margin: 8px 0 0 0; padding-left: 15px; list-style-type: none; }
         .rider-list li { margin-bottom: 4px; font-size: 14px; color: #333; }
         .badge-done { background-color: #1cc88a; color: white; padding: 2px 6px; font-size: 11px; border-radius: 3px; font-weight: bold; margin-left: 5px; }
@@ -104,8 +103,8 @@
     </div>
 
     <script>
-        // ⚠️ [중요] 1단계에서 복사한 구글 앱스 스크립트 웹 앱 URL을 여기에 붙여넣으세요!
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxbXGHyq4MMG8E-AQO-P6UFJJmhhS-Z1myC4phUZgBzrEIhBQ3ypwrn4FE-64GAfsrK/exec";
+        // ⚠️ 새로 배포한 웹 앱 URL을 여기에 넣어주세요!
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwwO--uUvveJJj-nM70gSV3TO9voY211g5euq9bxZgsDy3GqpAFmTP9RZHxiAVC7a4f/exec";
 
         let members = [];
         let drivers = [];
@@ -114,8 +113,8 @@
 
         window.onload = async function() {
             await loadMembersFromGitHub();
-            await fetchSyncData(); // 구글 시트에서 최신 현황 불러오기
-            setInterval(fetchSyncData, 5000); // 5초마다 자동 동기화
+            await fetchSyncData(); 
+            setInterval(fetchSyncData, 4000); // 4초마다 자동 동기화
         };
 
         async function loadMembersFromGitHub() {
@@ -163,14 +162,13 @@
                 driverSelect.innerHTML += `<option value="${index}">${displayText}</option>`;
                 riderSelect.innerHTML += `<option value="${index}">${displayText}</option>`;
             });
-            document.getElementById('member-count').innerText = `현재 등록된 성도 수: ${members.length}명 (실시간 연동 완료)`;
+            document.getElementById('member-count').innerText = `현재 등록된 성도 수: ${members.length}명 (실시간 연동 활성화)`;
         }
 
-        // 구글 스프레드시트와 데이터 동기화 (서버에서 가져오기)
         async function fetchSyncData() {
             if (GOOGLE_SCRIPT_URL.includes("여기에")) return;
             try {
-                let response = await fetch(GOOGLE_SCRIPT_URL, { method: "GET" });
+                let response = await fetch(GOOGLE_SCRIPT_URL + "?t=" + Date.now());
                 let rows = await response.json();
                 
                 drivers = [];
@@ -203,16 +201,12 @@
             }
         }
 
-        // 구글 스프레드시트로 데이터 저장하기 (서버로 보내기)
         async function saveSyncData() {
             if (GOOGLE_SCRIPT_URL.includes("여기에")) return;
             try {
-                await fetch(GOOGLE_SCRIPT_URL, {
-                    method: "POST",
-                    mode: "no-cors",
-                    headers: { "Content-Type": "text/plain" },
-                    body: JSON.stringify({ action: "save", drivers: drivers, riders: riders })
-                });
+                let payload = JSON.stringify({ drivers: drivers, riders: riders });
+                let encodedData = encodeURIComponent(payload);
+                await fetch(GOOGLE_SCRIPT_URL + "?action=save&data=" + encodedData);
             } catch (e) {
                 console.error("저장 오류", e);
             }
