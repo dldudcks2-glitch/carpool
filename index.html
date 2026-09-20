@@ -25,7 +25,7 @@
         .action-btns button { padding: 3px 8px; font-size: 12px; font-weight: normal; margin-left: 4px; border-radius: 3px; }
         .btn-edit { background-color: #f6c23e; color: #fff; }
         .btn-del { background-color: #e74a3b; color: #fff; }
-        .btn-pick { background-color: #1cc88a; color: #fff; padding: 2px 6px; font-size: 11px; border-radius: 3px; font-weight: normal; margin-right: 3px; }
+        .btn-pick { background-color: #1cc88a; color: #fff; padding: 2px 6px; font-size: 11px; border-radius: 3px; font-weight: normal; margin-right: 3px; margin-top: 3px; display: inline-block; }
         .rider-list { margin: 8px 0 0 0; padding-left: 15px; list-style-type: none; }
         .rider-list li { margin-bottom: 4px; font-size: 14px; color: #333; }
         .badge-done { background-color: #1cc88a; color: white; padding: 2px 6px; font-size: 11px; border-radius: 3px; font-weight: bold; margin-left: 5px; }
@@ -293,7 +293,7 @@
             }
         }
 
-        // 🧠 운전자가 대기자를 수동으로 자기 차에 태우는 함수
+        // 🧠 운전자가 대기자를 수동으로 자기 차에 태우는 함수 (지역 상관없이 버튼 제공)
         function manualPickRider(driverIdx, riderOriginalIndex) {
             let driver = drivers[driverIdx];
             let rider = riders.find(r => r.originalIndex === riderOriginalIndex);
@@ -342,7 +342,6 @@
         }
 
         function renderMatching() {
-            // 수동 배정된 탑승자들의 고유 번호 목록 수집
             let manuallyAssignedIndices = new Set();
             drivers.forEach(d => {
                 if (!d.manualRiders) d.manualRiders = [];
@@ -415,7 +414,7 @@
                                 ${displayWaiting.map(r => {
                                     let originalIdx = riders.findIndex(item => item.originalIndex === r.originalIndex);
                                     
-                                    // 각 운전자별 [내 차에 태우기] 버튼 생성
+                                    // 💡 지역 일치 여부와 상관없이 잔여석이 있는 운전자라면 무조건 [차에 태우기] 버튼 생성
                                     let pickButtons = drivers.map((d, dIdx) => {
                                         let hasSeat = d.passengers.length < d.seats;
                                         return hasSeat ? `<button class="btn-pick" onclick="manualPickRider(${dIdx}, '${r.originalIndex}')">${d.name} 차에 태우기</button>` : '';
